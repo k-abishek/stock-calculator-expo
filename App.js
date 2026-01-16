@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 
 export default function App() {
+  const [mode, setMode] = useState('select');
   const [buyPrice, setBuyPrice] = useState('');
   const [sellPrice, setSellPrice] = useState('');
   const [quantity, setQuantity] = useState('');
@@ -39,33 +40,36 @@ export default function App() {
     const sellAmount = sellPriceNum * quantityNum;
     const grossProfit = sellAmount - buyAmount;
 
-    // Brokerage: ₹20 per order OR 0.1% of trade value (whichever is lower), minimum ₹5
-    const buyBrokerage = Math.max(5, Math.min(20, buyAmount * 0.001));
-    const sellBrokerage = Math.max(5, Math.min(20, sellAmount * 0.001));
-    const totalBrokerage = buyBrokerage + sellBrokerage;
+    let totalBrokerage, stt, stampDuty, exchangeAndRegFees, dpCharges, gst, totalCosts, incomeTaxRate;
 
-    // STT: 0.025% on sell side only
-    const stt = sellAmount * 0.00025;
+    if (mode === 'intraday') {
+      // Intraday calculations
+      const buyBrokerage = Math.max(5, Math.min(20, buyAmount * 0.001));
+      const sellBrokerage = Math.max(5, Math.min(20, sellAmount * 0.001));
+      totalBrokerage = buyBrokerage + sellBrokerage;
+      stt = sellAmount * 0.00025; // 0.025% on sell
+      stampDuty = buyAmount * 0.00003; // ~0.003% on buy
+      exchangeAndRegFees = (buyAmount + sellAmount) * 0.00003; // ~0.003% on turnover
+      dpCharges = 18; // rough
+      gst = (totalBrokerage + dpCharges) * 0.18;
+      incomeTaxRate = 0.3; // approximate 30%
+    } else if (mode === 'delivery') {
+      // Delivery calculations
+      const buyBrokerage = 0;
+      const sellBrokerage = 0;
+      totalBrokerage = 0; // zero brokerage
+      stt = (buyAmount + sellAmount) * 0.001; // 0.1% on buy and sell
+      stampDuty = buyAmount * 0.00015; // 0.015% on buy
+      exchangeAndRegFees = (buyAmount + sellAmount) * 0.0000345; // 0.00345%
+      const sebi = (buyAmount + sellAmount) * 0.000001; // 0.0001%
+      dpCharges = 15.93; // fixed per sell
+      gst = (exchangeAndRegFees + sebi) * 0.18; // 18% on exchange + sebi
+      incomeTaxRate = 0.2; // STCG 20%
+    }
 
-    // Stamp duty: ~0.003% on buy side
-    const stampDuty = buyAmount * 0.00003;
-
-    // Exchange + SEBI fees (rough): ~0.003% on turnover
-    const exchangeAndRegFees = (buyAmount + sellAmount) * 0.00003;
-
-    // DP charges (rough): ~₹18 on sell
-    const dpCharges = 18;
-
-    // GST: 18% on (brokerage + DP)
-    const gst = (totalBrokerage + dpCharges) * 0.18;
-
-    const totalCosts =
-      totalBrokerage + stt + stampDuty + exchangeAndRegFees + dpCharges + gst;
-
+    totalCosts = totalBrokerage + stt + stampDuty + exchangeAndRegFees + dpCharges + gst;
     const netProfitAfterCosts = grossProfit - totalCosts;
-
-    // Income tax: approximate 30% on profit (business income). User slab may differ.
-    const incomeTaxOnProfit = Math.max(0, netProfitAfterCosts * 0.3);
+    const incomeTaxOnProfit = Math.max(0, netProfitAfterCosts * incomeTaxRate);
     const netProfitAfterTax = netProfitAfterCosts - incomeTaxOnProfit;
 
     setResults({
@@ -86,6 +90,7 @@ export default function App() {
       costPercentage: ((totalCosts / buyAmount) * 100).toFixed(2),
       netProfitAfterCosts: netProfitAfterCosts.toFixed(2),
       incomeTax: incomeTaxOnProfit.toFixed(2),
+      incomeTaxRate: incomeTaxRate,
       netProfitAfterTax: netProfitAfterTax.toFixed(2),
     });
   };
@@ -97,11 +102,36 @@ export default function App() {
     setResults(null);
   };
 
+  if (mode === 'select') {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <View style={styles.selectContainer}>
+          <Text style={styles.selectTitle}>Select Trading Type</Text>
+          <TouchableOpacity style={styles.selectButton} onPress={() => setMode('intraday')}>
+            <Text style={styles.selectButtonText}>Intraday</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.selectButton} onPress={() => setMode('delivery')}>
+            <Text style={styles.selectButtonText}>Delivery</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
-        <Text style={styles.title}>Intraday ETF Profit Calculator</Text>
-        <Text style={styles.subtitle}>Net profit after charges + (approx) income tax</Text>
+        {mode !== 'select' && (
+          <TouchableOpacity onPress={() => setMode('select')} style={styles.backButton}>
+            <Text style={styles.backButtonText}>← Back</Text>
+          </TouchableOpacity>
+        )}
+        <Text style={styles.title}>
+          {mode === 'intraday' ? 'Intraday ETF Profit Calculator' : mode === 'delivery' ? 'Delivery ETF Profit Calculator' : 'Stock Calculator'}
+        </Text>
+        <Text style={styles.subtitle}>
+          {mode === 'intraday' ? 'Net profit after charges + (approx) income tax' : mode === 'delivery' ? 'Net profit after charges + STCG tax (approx)' : 'Select trading type'}
+        </Text>
       </View>
 
       <View style={styles.card}>
@@ -174,16 +204,26 @@ export default function App() {
           <View style={styles.box}>
             <Text style={styles.boxTitle}>Net</Text>
             <Row label="After Costs" value={`₹${results.netProfitAfterCosts}`} strong />
-            <Row label="Income Tax (~30%)" value={`₹${results.incomeTax}`} cost />
+            <Row label={`Income Tax (~${(results.incomeTaxRate * 100).toFixed(0)}%)`} value={`₹${results.incomeTax}`} cost />
             <View style={styles.divider} />
             <Row label="Final Net" value={`₹${results.netProfitAfterTax}`} strong />
           </View>
 
           <View style={styles.note}>
             <Text style={styles.noteTitle}>Notes</Text>
-            <Text style={styles.noteText}>• Income tax is approximate (depends on your slab).</Text>
-            <Text style={styles.noteText}>• DP charges can vary / sometimes waived.</Text>
-            <Text style={styles.noteText}>• Bid-ask spread not included.</Text>
+            {mode === 'intraday' ? (
+              <>
+                <Text style={styles.noteText}>• Income tax is approximate (depends on your slab).</Text>
+                <Text style={styles.noteText}>• DP charges can vary / sometimes waived.</Text>
+                <Text style={styles.noteText}>• Bid-ask spread not included.</Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.noteText}>• STCG tax at 20% if held {'<'}1 year; LTCG lower if {'>'}1 year.</Text>
+                <Text style={styles.noteText}>• DP charges fixed at ₹15.93 per sell.</Text>
+                <Text style={styles.noteText}>• Bid-ask spread not included.</Text>
+              </>
+            )}
           </View>
         </View>
       )}
@@ -275,4 +315,11 @@ const styles = StyleSheet.create({
   },
   noteTitle: { fontSize: 14, fontWeight: '800', color: '#856404', marginBottom: 8 },
   noteText: { fontSize: 12, color: '#856404', lineHeight: 18 },
+
+  backButton: { marginBottom: 10 },
+  backButtonText: { color: '#fff', fontSize: 16 },
+  selectContainer: { alignItems: 'center' },
+  selectTitle: { fontSize: 24, fontWeight: 'bold', color: '#2c3e50', marginBottom: 20 },
+  selectButton: { backgroundColor: '#27ae60', paddingVertical: 15, paddingHorizontal: 30, borderRadius: 10, marginVertical: 10, width: 200, alignItems: 'center' },
+  selectButtonText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
 });
