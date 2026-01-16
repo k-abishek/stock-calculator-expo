@@ -40,12 +40,12 @@ export default function App() {
     const sellAmount = sellPriceNum * quantityNum;
     const grossProfit = sellAmount - buyAmount;
 
-    let totalBrokerage, stt, stampDuty, exchangeAndRegFees, dpCharges, gst, totalCosts, incomeTaxRate;
+    let totalBrokerage, stt, stampDuty, exchangeAndRegFees, dpCharges, gst, totalCosts, incomeTaxRate, buyBrokerage, sellBrokerage;
 
     if (mode === 'intraday') {
       // Intraday calculations
-      const buyBrokerage = Math.max(5, Math.min(20, buyAmount * 0.001));
-      const sellBrokerage = Math.max(5, Math.min(20, sellAmount * 0.001));
+      buyBrokerage = Math.max(5, Math.min(20, buyAmount * 0.001));
+      sellBrokerage = Math.max(5, Math.min(20, sellAmount * 0.001));
       totalBrokerage = buyBrokerage + sellBrokerage;
       stt = sellAmount * 0.00025; // 0.025% on sell
       stampDuty = buyAmount * 0.00003; // ~0.003% on buy
@@ -55,8 +55,8 @@ export default function App() {
       incomeTaxRate = 0.3; // approximate 30%
     } else if (mode === 'delivery') {
       // Delivery calculations
-      const buyBrokerage = 0;
-      const sellBrokerage = 0;
+      buyBrokerage = 0;
+      sellBrokerage = 0;
       totalBrokerage = 0; // zero brokerage
       stt = (buyAmount + sellAmount) * 0.001; // 0.1% on buy and sell
       stampDuty = buyAmount * 0.00015; // 0.015% on buy
